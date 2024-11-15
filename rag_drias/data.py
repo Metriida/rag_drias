@@ -6,9 +6,9 @@ from typing import List
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import (
     DirectoryLoader,
-    PyPDFLoader,
     TextLoader,
 )
+import fitz
 from langchain_core.documents.base import Document
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from markdownify import markdownify as md
@@ -167,14 +167,17 @@ def create_docs_html(source_html_path: Path) -> List[Document]:
 
 def create_docs_pdf(source_pdf_path: Path) -> List[Document]:
     """Load every .pdf file in the source directory into a langchain document"""
-    loader = DirectoryLoader(source_pdf_path, glob="*.pdf", loader_cls=PyPDFLoader)
-    docs = loader.load()
-    for doc in tqdm(docs, desc="Cleaning docs"):
-        doc.page_content = md(doc.page_content, heading_style="ATX", strip=["a"])
-        doc.page_content = replace_many_newlines(doc.page_content)
-        title = doc.page_content.partition("\n")[0][2:]  # Doesn't work for space pages
-        doc.metadata["title"] = title
-    print(f"{len(docs)} pdf pages loaded from {source_pdf_path}")
+    print(f"Loading pdf files from {source_pdf_path}...")    
+    docs = []
+    for source_pdf_path in source_pdf_path.glob("*.pdf"):
+        doc = fitz.open(source_pdf_path)
+        for page in doc:
+            text = page.get_text("text")
+            clean_text = re.sub(r"(?<![.!?])\n(?![A-Z])", " ", text)
+            doc = Document(page_content=clean_text)
+            doc.metadata["title"] = Path(source_pdf_path).stem
+            doc.metadata["url"] = Path(source_pdf_path).name
+            docs.append(doc)
     return docs
 
 

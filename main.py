@@ -112,6 +112,24 @@ def rerank(text: str, docs: List[Document], k: int = 4) -> List[Document]:
         )
 
     _, indices = scores.topk(k)
+    scores, indices = scores.topk(k)
+
+    # map scores to float values between 0 and 1 by a sigmoid function
+    scores = torch.sigmoid(scores).cpu().numpy()
+    max_score = scores.max()
+    # si bon score dans les premier chunk pas d'intèret a prendre le reste
+    if max_score > 0.5:
+        indices = indices[scores > 0.2]
+    else:
+        indices = indices[scores >3e-3]
+
+    sum_score = 0
+    for i, score in enumerate(scores):
+        sum_score += score
+        if sum_score > 3:
+            break
+    indices = indices[:i]
+
     return [docs[i] for i in indices]
 
 
@@ -210,7 +228,7 @@ def answer(
 
         retrieved_infos = ""
         for chunk in chunks:
-            retrieved_infos += f"\n-- Page Title : {chunk.metadata['title']} --\n"
+            retrieved_infos += f"\n\n-- Page Title : {chunk.metadata['title']} --\n"
             retrieved_infos += f"-- url : {chunk.metadata['url']} --\n"
             retrieved_infos += chunk.page_content
 
@@ -221,7 +239,7 @@ def answer(
             },
             {
                 "role": "user",
-                "content": f"Avec les informations suivantes si utiles: {retrieved_infos}\nRéponds à cette question de manière claire et concise: {text}\nRéponse:",
+                "content": f"Avec les informations suivantes si utiles: {retrieved_infos}\n\nRéponds à cette question de manière claire et concise: {text}\nRéponse:",
             },
         ]
     else:
